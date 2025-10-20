@@ -51,12 +51,14 @@ class ForcastBasedModel(nn.Module):
         embedding_dim,
         freeze=False,
         gpu=-1,
+        multi_gpu=False, #!
         anomaly_ratio=None,
         patience=3,
         **kwargs,
     ):
         super(ForcastBasedModel, self).__init__()
         self.device = set_device(gpu)
+        self.multi_gpu = multi_gpu #!
         self.topk = topk
         self.meta_data = meta_data
         self.feature_type = feature_type
@@ -77,7 +79,7 @@ class ForcastBasedModel(nn.Module):
                 use_tfidf=use_tfidf,
             )
         else:
-            logging.info(f'Unrecognized feature type, except sequentials or semantics, got {feature_type}')
+            logging.info(f'Unrecognized feature type, expect sequentials or semantics, got {feature_type}')
 
     def evaluate(self, test_loader, dtype="test"):
         logging.info("Evaluating {} data.".format(dtype))
@@ -259,6 +261,16 @@ class ForcastBasedModel(nn.Module):
     def __input2device(self, batch_input):
         return {k: v.to(self.device) for k, v in batch_input.items()}
 
+    def __wrap_model(self):
+        if self.use_multi_gpu and torch.cuda.device_count() > 1:
+            if not hasattr(self, '_wrapped_model'):
+                device_ids = list(range(torch.cuda.device_count()))
+                self._wrapped_model = torch.nn.DataParallel(self, device_ids=device_ids)
+                logging.info(f"Model wrapped with DataParallel on GPUs {device_ids}")
+            return self._wrapped_model
+        else:
+            return self
+
     def save_model(self):
         logging.info("Saving model to {}".format(self.model_save_file))
         try:
@@ -286,7 +298,9 @@ class ForcastBasedModel(nn.Module):
         worse_count = 0
         for epoch in range(1, epoches + 1):
             epoch_time_start = time.time()
-            model = self.train()
+            #model = self.train()
+            model = self.__wrap_model()
+            model.train()
             optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
             batch_cnt = 0
