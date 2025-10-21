@@ -4,13 +4,14 @@
 import sys
 sys.path.append("../")
 import argparse
-from torch.utils.data import DataLoader
+import torch.distributed as dist
+from torch.utils.data import DataLoader, DistributedSampler
 
 from deeploglizer.models import LSTM
 from deeploglizer.common.preprocess import FeatureExtractor
 from deeploglizer.common.dataloader import load_sessions, log_dataset
 from deeploglizer.common.utils import seed_everything, dump_final_results, dump_params
-
+from deeploglizer.common.ddp import setup, cleanup, is_main_process
 
 parser = argparse.ArgumentParser()
 
@@ -59,6 +60,8 @@ model_save_path = dump_params(params)
 
 
 if __name__ == "__main__":
+    is_ddp, local_rank = setup() #!
+
     seed_everything(params["random_seed"])
 
     session_train, session_test = load_sessions(data_dir=params["data_dir"])
@@ -69,13 +72,24 @@ if __name__ == "__main__":
     session_test = ext.transform(session_test, datatype="test")
 
     dataset_train = log_dataset(session_train, feature_type=params["feature_type"])
+    train_sampler = DistributedSampler(dataset_train, shuffle=True, drop_last=True) if is_ddp else None #!
     dataloader_train = DataLoader(
-        dataset_train, batch_size=params["batch_size"], shuffle=True, pin_memory=True
+        dataset_train,
+        batch_size=params["batch_size"],
+        shuffle=(train_sampler is None), # only shuffle when not distributed
+        pin_memory=True,
+        num_workers=4, #!
+        persistent_workers=True
     )
 
     dataset_test = log_dataset(session_test, feature_type=params["feature_type"])
     dataloader_test = DataLoader(
-        dataset_test, batch_size=4096, shuffle=False, pin_memory=True
+        dataset_test,
+        batch_size=4096,
+        shuffle=False,
+        pin_memory=True,
+        num_workers=4, #!
+        persistent_workers=True
     )
 
     model = LSTM(meta_data=ext.meta_data, model_save_path=model_save_path, **params)
@@ -100,5 +114,16 @@ if __name__ == "__main__":
     args_str = "\t".join(
         ["{}:{}".format(k, v) for k, v in params.items() if k in key_info]
     )
+    if is_main_process():
+        print(eval_results)
+        dump_final_results(params, eval_results, model)
 
-    dump_final_results(params, eval_results, model)
+    # destroy DDP process group
+    try:
+        del dataloader_train
+        del dataloader_test
+    except NameError:
+        pass
+    if dist.is_initialized():
+        dist.barrier()
+    cleanup()

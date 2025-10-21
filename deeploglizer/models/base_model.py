@@ -1,6 +1,7 @@
 import os
 import time
 import torch
+import torch.distributed as dist
 import logging
 import numpy as np
 import pandas as pd
@@ -9,7 +10,7 @@ from collections import defaultdict
 from sklearn.metrics import accuracy_score, f1_score, recall_score, precision_score
 
 from deeploglizer.common.utils import set_device, tensor2flatten_arr
-
+from deeploglizer.common.ddp import is_main_process
 
 class Embedder(nn.Module):
     def __init__(
@@ -288,7 +289,19 @@ class ForcastBasedModel(nn.Module):
         self.load_state_dict(torch.load(model_save_file, map_location=self.device))
 
     def fit(self, train_loader, test_loader=None, epoches=10, learning_rate=1.0e-3):
+        # detect DDP and set the correct CUDA device
+        is_ddp = dist.is_initialized()
+        local_rank = int(os.environ["LOCAL_RANK"]) if is_ddp else 0
+        self.device = torch.device(f'cuda:{local_rank}')
+
         self.to(self.device)
+
+        # wrap once
+        model = self
+        if is_ddp:
+            from torch.nn.parallel import DistributedDataParallel as DDP
+            model = DDP(self, device_ids=[local_rank], output_device=local_rank)
+
         logging.info(
             "Start training on {} batches with {}.".format(
                 len(train_loader), self.device
@@ -299,8 +312,12 @@ class ForcastBasedModel(nn.Module):
         worse_count = 0
         for epoch in range(1, epoches + 1):
             epoch_time_start = time.time()
+
+            if hasattr(train_loader, "sampler") and hasattr(train_loader.sampler, "set_epoch"):
+                train_loader.sampler.set_epoch(epoch)
+
             #model = self.train()
-            model = self.__wrap_model()
+            #model = self.__wrap_model()
             model.train()
             optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
@@ -313,26 +330,42 @@ class ForcastBasedModel(nn.Module):
                 optimizer.zero_grad()
                 epoch_loss += loss.item()
                 batch_cnt += 1
-            epoch_loss = epoch_loss / batch_cnt
+            epoch_loss = epoch_loss / max(batch_cnt, 1) #!
             epoch_time_elapsed = time.time() - epoch_time_start
-            logging.info(
-                "Epoch {}/{}, training loss: {:.5f} [{:.2f}s]".format(epoch, epoches, epoch_loss, epoch_time_elapsed)
-            )
+            if is_main_process(): #!
+                logging.info(
+                    "Epoch {}/{}, training loss: {:.5f} [{:.2f}s]".format(epoch, epoches, epoch_loss, epoch_time_elapsed)
+                )
             self.time_tracker["train"] = epoch_time_elapsed
 
-            if test_loader is not None and (epoch % 1 == 0):
-                eval_results = self.evaluate(test_loader)
-                if eval_results["f1"] > best_f1:
-                    best_f1 = eval_results["f1"]
-                    best_results = eval_results
-                    best_results["converge"] = int(epoch)
-                    self.save_model()
-                    worse_count = 0
-                else:
-                    worse_count += 1
-                    if worse_count >= self.patience:
-                        logging.info("Early stop at epoch: {}".format(epoch))
-                        break
+            if dist.is_initialized(): #!
+                dist.barrier()
 
-        self.load_model(self.model_save_file)
+            stop = False #!
+            if test_loader is not None and (epoch % 1 == 0): #!
+                if is_main_process(): # rank 0 only
+                    eval_results = self.evaluate(test_loader)
+                    if eval_results["f1"] > best_f1:
+                        best_f1 = eval_results["f1"]
+                        best_results = eval_results
+                        best_results["converge"] = int(epoch)
+                        self.save_model()
+                        worse_count = 0
+                    else:
+                        worse_count += 1
+                        if worse_count >= self.patience:
+                            logging.info("Early stop at epoch: {}".format(epoch))
+                            #break
+                            stop = True
+            if dist.is_initialized(): # broadcast early stopping to all ranks
+                flag = torch.tensor([1 if stop else 0], device=self.device)
+                if dist.get_rank() == 0: # only value from rank 0 matters, broadcast it
+                    pass
+                dist.broadcast(flag, src=0)
+                stop = bool(flag.item())
+            if stop:
+                break
+
+        if is_main_process():
+            self.load_model(self.model_save_file)
         return best_results
