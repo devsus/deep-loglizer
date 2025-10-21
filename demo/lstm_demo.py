@@ -51,6 +51,7 @@ parser.add_argument("--patience", default=3, type=int)
 ##### Others
 parser.add_argument("--random_seed", default=42, type=int)
 parser.add_argument("--gpu", default=0, type=int)
+parser.add_argument("--multi_gpu", action="store_true")
 
 params = vars(parser.parse_args())
 

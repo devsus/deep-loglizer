@@ -128,3 +128,7 @@ dmypy.json
 # Pyre type checker
 .pyre/
 .DS_Store
+
+# Dataset files
+data/processed/HDFS
+data/processed/BGL

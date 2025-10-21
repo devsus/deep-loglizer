@@ -262,7 +262,8 @@ class ForcastBasedModel(nn.Module):
         return {k: v.to(self.device) for k, v in batch_input.items()}
 
     def __wrap_model(self):
-        if self.use_multi_gpu and torch.cuda.device_count() > 1:
+        print(f"DEBUG: __wrap_model called, multi_gpu={self.multi_gpu}, gpu_count={torch.cuda.device_count()}")
+        if self.multi_gpu and torch.cuda.device_count() > 1:
             if not hasattr(self, '_wrapped_model'):
                 device_ids = list(range(torch.cuda.device_count()))
                 self._wrapped_model = torch.nn.DataParallel(self, device_ids=device_ids)
