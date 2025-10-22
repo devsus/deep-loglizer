@@ -8,3 +8,5 @@
 
   - switched from DataParallel to DDP
   - gitignore for dataset files
+  
+  - edit init. because of pynvml error (miniconda3/../torch/cuda)
