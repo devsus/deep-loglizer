@@ -101,20 +101,18 @@ if __name__ == "__main__":
         learning_rate=params["learning_rate"],
     )
 
-    result_str = "\t".join(["{}-{:.4f}".format(k, v) for k, v in eval_results.items()])
-
-    key_info = [
-        "dataset",
-        "train_anomaly_ratio",
-        "feature_type",
-        "label_type",
-        "use_attention",
-    ]
-
-    args_str = "\t".join(
-        ["{}:{}".format(k, v) for k, v in params.items() if k in key_info]
-    )
-    if is_main_process():
+    if is_main_process(): # only rank 0 formats eval_results
+        result_str = "\t".join(["{}-{:.4f}".format(k, v) for k, v in eval_results.items()])
+        key_info = [
+            "dataset",
+            "train_anomaly_ratio",
+            "feature_type",
+            "label_type",
+            "use_attention",
+        ]
+        args_str = "\t".join(
+            ["{}:{}".format(k, v) for k, v in params.items() if k in key_info]
+        )
         print(eval_results)
         dump_final_results(params, eval_results, model)
 
