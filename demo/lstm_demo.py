@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-
+import hashlib
+import logging
+import os
 import sys
 sys.path.append("../")
 import argparse
@@ -77,6 +79,7 @@ if __name__ == "__main__":
         dataset_train,
         batch_size=params["batch_size"],
         shuffle=(train_sampler is None), # only shuffle when not distributed
+        sampler=train_sampler,  #!
         pin_memory=True,
         num_workers=3, #!
         persistent_workers=True,
