@@ -3,6 +3,7 @@
 import hashlib
 import logging
 import os
+import shutil
 import sys
 sys.path.append("../")
 import argparse
@@ -54,7 +55,8 @@ parser.add_argument("--patience", default=3, type=int)
 ##### Others
 parser.add_argument("--random_seed", default=42, type=int)
 parser.add_argument("--gpu", default=0, type=int)
-parser.add_argument("--multi_gpu", action="store_true")
+parser.add_argument("--multi_gpu", action="store_true") #!
+parser.add_argument("--cache", action="store_true") #!
 
 params = vars(parser.parse_args())
 
@@ -69,6 +71,13 @@ if __name__ == "__main__":
     session_train, session_test = load_sessions(data_dir=params["data_dir"])
 
     ext = FeatureExtractor(**params)
+
+    # fresh cache for this run (cache used with DDP)
+    if params["cache"] and (not is_ddp or local_rank == 0):
+        shutil.rmtree(getattr(ext, "cache_dir", "./cache/tmp"), ignore_errors=True)
+        os.makedirs(ext.cache_dir, exist_ok=True)
+
+    #
 
     session_train = ext.fit_transform(session_train)
     session_test = ext.transform(session_test, datatype="test")
