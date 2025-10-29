@@ -320,6 +320,12 @@ class FeatureExtractor(BaseEstimator):
             self.save()
 
     def transform(self, session_dict, datatype="train"):
+        # don't print transforming when just loading cache
+        if self.cache:
+            cached_file = os.path.join(self.cache_dir, datatype + ".pkl")
+            if os.path.isfile(cached_file):
+                return load_pickle(cached_file)
+
         logging.info("Transforming {} data.".format(datatype))
         ulog = set(itertools.chain(*[v["templates"] for k, v in session_dict.items()]))
         if datatype == "test":
@@ -327,10 +333,10 @@ class FeatureExtractor(BaseEstimator):
             ulog_new = ulog - self.ulog_train
             logging.info(f"{len(ulog_new)} new templates show while testing.")
 
-        if self.cache:
+        """if self.cache:
             cached_file = os.path.join(self.cache_dir, datatype + ".pkl")
             if os.path.isfile(cached_file):
-                return load_pickle(cached_file)
+                return load_pickle(cached_file)"""
 
         # generate windows, each window contains logid only
         if datatype == "train":

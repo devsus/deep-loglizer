@@ -4,10 +4,10 @@ import torch.distributed as dist
 
 def setup() -> tuple[bool, int]:
     if "LOCAL_RANK" in os.environ:
-        if not dist.is_initialized():
-            dist.init_process_group(backend="nccl")
         local_rank = int(os.environ["LOCAL_RANK"])
         torch.cuda.set_device(local_rank)
+        if not dist.is_initialized():
+            dist.init_process_group(backend="nccl")
         return True, local_rank
     return False, 0
 

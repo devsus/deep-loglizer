@@ -62,7 +62,6 @@ params = vars(parser.parse_args())
 
 model_save_path = dump_params(params)
 
-
 if __name__ == "__main__":
     is_ddp, local_rank = setup() #!
 
@@ -80,7 +79,7 @@ if __name__ == "__main__":
 
     # all ranks see post-clean state
     if is_ddp:
-        dist.barrier()
+        dist.barrier(device_ids=[local_rank])
 
     # rank0 does preprocessing once; others only read
     if params["cache"] and is_ddp:
@@ -89,7 +88,7 @@ if __name__ == "__main__":
             session_train = ext.transform(session_dict=session_train, datatype="train")  # writes train.pkl :contentReference[oaicite:4]{index=4}
             session_test = ext.transform(session_dict=session_test, datatype="test")
         # wait for files
-        dist.barrier()
+        dist.barrier(device_ids=[local_rank])   # !
         if local_rank > 0:
             assert ext.load(), f'Rank {local_rank} failed to load cached feature extractor.'
             session_train = ext.transform(session_dict=session_train, datatype="train")  # loads train.pkl
@@ -151,7 +150,7 @@ if __name__ == "__main__":
         dump_final_results(params, eval_results, model)
 
     # clean cache
-    if params["cache"] and (not is_ddp or local_rank == 0):
+    if params["cache"] and is_ddp:
         shutil.rmtree(getattr(ext, "cache_dir", "./cache"), ignore_errors=True)
 
     # destroy DDP process group
