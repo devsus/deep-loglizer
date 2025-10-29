@@ -60,10 +60,12 @@ parser.add_argument("--cache", action="store_true") #!
 
 params = vars(parser.parse_args())
 
-model_save_path = dump_params(params)
+# model_save_path = dump_params(params)
 
 if __name__ == "__main__":
     is_ddp, local_rank = setup() #!
+
+    model_save_path = dump_params(params)
 
     seed_everything(params["random_seed"])
 
