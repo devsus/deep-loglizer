@@ -72,15 +72,36 @@ if __name__ == "__main__":
 
     ext = FeatureExtractor(**params)
 
-    # fresh cache for this run (cache used with DDP)
+    # quick fix for using cache when running DDP
+    # fresh cache for this run
     if params["cache"] and (not is_ddp or local_rank == 0):
-        shutil.rmtree(getattr(ext, "cache_dir", "./cache/tmp"), ignore_errors=True)
+        shutil.rmtree(getattr(ext, "cache_dir", "./cache"), ignore_errors=True)
         os.makedirs(ext.cache_dir, exist_ok=True)
 
-    #
+    # all ranks see post-clean state
+    if is_ddp:
+        dist.barrier()
 
-    session_train = ext.fit_transform(session_train)
-    session_test = ext.transform(session_test, datatype="test")
+    # rank0 does preprocessing once; others only read
+    if params["cache"] and is_ddp:
+        if local_rank == 0:
+            ext.fit(session_train)
+            session_train = ext.transform(session_dict=session_train, datatype="train")  # writes train.pkl :contentReference[oaicite:4]{index=4}
+            session_test = ext.transform(session_dict=session_test, datatype="test")
+        # wait for files
+        dist.barrier()
+        if local_rank > 0:
+            assert ext.load(), f'Rank {local_rank} failed to load cached feature extractor.'
+            session_train = ext.transform(session_dict=session_train, datatype="train")  # loads train.pkl
+            session_test = ext.transform(session_dict=session_test, datatype="test")  # loads test.pkl
+    else:
+        # single-process or user didn’t request cache; previous behavior
+        session_train = ext.fit_transform(session_train)
+        session_test = ext.transform(session_test, datatype="test")
+
+
+    # session_train = ext.fit_transform(session_train)
+    # session_test = ext.transform(session_test, datatype="test")
 
     dataset_train = log_dataset(session_train, feature_type=params["feature_type"])
     train_sampler = DistributedSampler(dataset_train, shuffle=True, drop_last=True) if is_ddp else None #!
@@ -128,6 +149,10 @@ if __name__ == "__main__":
         )
         print(eval_results)
         dump_final_results(params, eval_results, model)
+
+    # clean cache
+    if params["cache"] and (not is_ddp or local_rank == 0):
+        shutil.rmtree(getattr(ext, "cache_dir", "./cache"), ignore_errors=True)
 
     # destroy DDP process group
     try:
