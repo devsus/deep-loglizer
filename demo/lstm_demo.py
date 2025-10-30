@@ -65,7 +65,24 @@ params = vars(parser.parse_args())
 if __name__ == "__main__":
     is_ddp, local_rank = setup() #!
 
-    model_save_path = dump_params(params)
+    # compute deterministic id without I/O
+    hash_id = hashlib.md5(str(sorted([(k, v) for k, v in params.items()])).encode("utf-8")).hexdigest()[:8]
+    params["hash_id"] = hash_id
+    model_save_path = os.path.join("./experiment_records", hash_id)
+    os.makedirs(model_save_path, exist_ok=True)
+
+    # only rank0 print model params
+    if is_main_process():
+        model_save_path = dump_params(params)
+    else:
+        log_file = os.path.join(model_save_path, f"{hash_id}.rank{local_rank}.log")
+        for h in logging.root.handlers[:]:
+            logging.root.removeHandler(h)
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s P%(process)d %(levelname)s %(message)s",
+            handlers=[logging.FileHandler(log_file)],
+        )
 
     seed_everything(params["random_seed"])
 
