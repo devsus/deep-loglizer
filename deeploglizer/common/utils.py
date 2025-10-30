@@ -9,7 +9,8 @@ import random
 import hashlib
 import logging
 from datetime import datetime
-from ddp import is_main_process
+
+from deeploglizer.common.ddp import is_main_process
 
 
 def dump_final_results(params, eval_results, model):
@@ -46,7 +47,7 @@ def dump_final_results(params, eval_results, model):
         )
         fw.write(info)
 
-
+# quick fix for duplicate stdout
 def dump_params(params):
     hash_id = params.get("hash_id") #!
     if not hash_id:
