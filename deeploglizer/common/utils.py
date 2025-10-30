@@ -9,6 +9,7 @@ import random
 import hashlib
 import logging
 from datetime import datetime
+from ddp import is_main_process
 
 
 def dump_final_results(params, eval_results, model):
@@ -47,27 +48,42 @@ def dump_final_results(params, eval_results, model):
 
 
 def dump_params(params):
-    hash_id = hashlib.md5(
-        str(sorted([(k, v) for k, v in params.items()])).encode("utf-8")
-    ).hexdigest()[0:8]
-    params["hash_id"] = hash_id
+    hash_id = params.get("hash_id") #!
+    if not hash_id:
+        hash_id = hashlib.md5(
+            str(sorted([(k, v) for k, v in params.items()])).encode("utf-8")
+        ).hexdigest()[0:8]
+        params["hash_id"] = hash_id
+
     save_dir = os.path.join("./experiment_records", hash_id)
     os.makedirs(save_dir, exist_ok=True)
 
-    json_pretty_dump(params, os.path.join(save_dir, "params.json"))
+    if is_main_process():
+        json_pretty_dump(params, os.path.join(save_dir, "params.json"))
 
-    log_file = os.path.join(save_dir, hash_id + ".log")
-    # logs will not show in the file without the two lines.
-    for handler in logging.root.handlers[:]:
-        logging.root.removeHandler(handler)
+        log_file = os.path.join(save_dir, hash_id + ".log")
+        # logs will not show in the file without the two lines.
+        for handler in logging.root.handlers[:]:
+            logging.root.removeHandler(handler)
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s P%(process)d %(levelname)s %(message)s",
-        handlers=[logging.FileHandler(log_file), logging.StreamHandler()],
-    )
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s P%(process)d %(levelname)s %(message)s",
+            handlers=[logging.FileHandler(log_file), logging.StreamHandler()],
+        )
 
-    logging.info(json.dumps(params, indent=4))
+        logging.info(json.dumps(params, indent=4))
+    else:
+        log_file = os.path.join(save_dir, hash_id + ".log")
+        # logs will not show in the file without the two lines.
+        for handler in logging.root.handlers[:]:
+            logging.root.removeHandler(handler)
+
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s P%(process)d %(levelname)s %(message)s",
+            handlers=[logging.FileHandler(log_file)],
+        )
     return save_dir
 
 
