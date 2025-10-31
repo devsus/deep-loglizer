@@ -311,19 +311,38 @@ class ForcastBasedModel(nn.Module):
             optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
             batch_cnt = 0
-            epoch_loss = 0
+            epoch_loss_num = 0.0  # sum off loss * batch_size across all ranks
+            sample_count = 0.0 # total samples across all ranks
             for batch_input in train_loader:
                 loss = model.forward(self.__input2device(batch_input))["loss"]
                 loss.backward()
                 optimizer.step()
                 optimizer.zero_grad()
-                epoch_loss += loss.item()
+
+                # global reduction for logging
+                # batch size (first tensor in batch; all share leading dim)
+                first_tensor = next(iter(batch_input.values()))
+                batch_size = int(first_tensor.size(0))
+
+                # per-batch num = mean_loss * batch_size
+                loss_num = (loss.detach() * batch_size).to(self.device)
+                count = torch.tensor([batch_size], dtype=loss_num.dtype, device=self.device)
+
+                if dist.is_initialized():
+                    dist.all_reduce(loss_num, op=dist.ReduceOp.SUM)
+                    dist.all_reduce(count, op=dist.ReduceOp.SUM)
+
+                epoch_loss_num += loss_num.item()
+                sample_count += count.item()
+
+                # epoch_loss += loss.item()
                 batch_cnt += 1
-            epoch_loss = epoch_loss / max(batch_cnt, 1) #!
+            epoch_loss = epoch_loss_num / max(sample_count, 1) #!
             epoch_time_elapsed = time.time() - epoch_time_start
             if is_main_process(): #!
                 logging.info(
-                    "Epoch {}/{}, training loss: {:.5f} [{:.2f}s]".format(epoch, epoches, epoch_loss, epoch_time_elapsed)
+                    "Epoch {}/{}, training loss: {:.5f} [{:.2f}s]".format(
+                        epoch, epoches, epoch_loss, epoch_time_elapsed)
                 )
             self.time_tracker["train"] = epoch_time_elapsed
 
