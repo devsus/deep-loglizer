@@ -3,6 +3,7 @@
 import hashlib
 import logging
 import os
+os.environ.setdefault("OMP_NUM_THREADS", "1") # !
 import shutil
 import sys
 sys.path.append("../")

@@ -275,7 +275,7 @@ class ForcastBasedModel(nn.Module):
 
     def load_model(self, model_save_file=""):
         logging.info("Loading model from {}".format(self.model_save_file))
-        self.load_state_dict(torch.load(model_save_file, map_location=self.device))
+        self.load_state_dict(torch.load(model_save_file, map_location=self.device, weights_only=True)) # !
 
     def fit(self, train_loader, test_loader=None, epoches=10, learning_rate=1.0e-3):
         # detect DDP and set the correct CUDA device
@@ -290,6 +290,8 @@ class ForcastBasedModel(nn.Module):
         if is_ddp:
             from torch.nn.parallel import DistributedDataParallel as DDP
             model = DDP(self, device_ids=[local_rank], output_device=local_rank)
+
+        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate) # !
 
         logging.info(
             "Start training on {} batches with {}.".format(
@@ -308,7 +310,7 @@ class ForcastBasedModel(nn.Module):
             #model = self.train()
             #model = self.__wrap_model()
             model.train()
-            optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+            # optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
             batch_cnt = 0
             epoch_loss_num = 0.0  # sum off loss * batch_size across all ranks

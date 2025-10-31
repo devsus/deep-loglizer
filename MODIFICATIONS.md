@@ -7,6 +7,12 @@
   - enables training across multiple GPUs when `use_multi_gpu=True`
 
   - switched from DataParallel to DDP
+  - OMP number of threads spec
+  
   - gitignore for dataset files
   
   - edit init. because of pynvml error (miniconda3/../torch/cuda)
+  
+  - optimizer Adam outside of training loop
+  
+  - use `weights_only=True` when loading model’s pure state dict (secure)
