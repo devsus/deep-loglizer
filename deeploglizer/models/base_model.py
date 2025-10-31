@@ -281,7 +281,7 @@ class ForcastBasedModel(nn.Module):
         # detect DDP and set the correct CUDA device
         is_ddp = dist.is_initialized()
         local_rank = int(os.environ["LOCAL_RANK"]) if is_ddp else 0
-        self.device = torch.device(f'cuda:{local_rank}')
+        self.device = torch.device(f'cuda:{local_rank}') if torch.cuda.is_available() else torch.device("cpu")
 
         self.to(self.device)
 
