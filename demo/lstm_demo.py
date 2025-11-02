@@ -105,7 +105,7 @@ if __name__ == "__main__":
     # session_test = ext.transform(session_test, datatype="test")
 
     dataset_train = log_dataset(session_train, feature_type=params["feature_type"])
-    train_sampler = DistributedSampler(dataset_train, shuffle=True, drop_last=True) if is_ddp else None #!
+    train_sampler = DistributedSampler(dataset_train, shuffle=True, drop_last=False) if is_ddp else None #! !
     dataloader_train = DataLoader(
         dataset_train,
         batch_size=params["batch_size"],
