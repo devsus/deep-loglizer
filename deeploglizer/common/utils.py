@@ -83,7 +83,7 @@ def dump_params(params):
         logging.basicConfig(
             level=logging.INFO,
             format="%(asctime)s P%(process)d %(levelname)s %(message)s",
-            handlers=[logging.FileHandler(log_file)],
+            handlers=[logging.FileHandler(log_file), logging.StreamHandler()],
         )
     return save_dir
 
