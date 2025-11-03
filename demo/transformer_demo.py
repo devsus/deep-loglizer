@@ -1,15 +1,21 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-
+import os
+import shutil
 import sys
+from codecs import ignore_errors
+
+import torch.distributed as dist
+
 sys.path.append("../")
 import argparse
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, DistributedSampler
+
 from deeploglizer.models import Transformer
 from deeploglizer.common.preprocess import FeatureExtractor
 from deeploglizer.common.dataloader import load_sessions, log_dataset
 from deeploglizer.common.utils import seed_everything, dump_final_results, dump_params
-
+from deeploglizer.common.ddp import setup, cleanup, is_main_process
 
 parser = argparse.ArgumentParser()
 
@@ -50,29 +56,70 @@ parser.add_argument("--patience", default=3, type=int)
 ##### Others
 parser.add_argument("--random_seed", default=42, type=int)
 parser.add_argument("--gpu", default=0, type=int)
+parser.add_argument("--cache", action="store_true")
 
 params = vars(parser.parse_args())
 
-model_save_path = dump_params(params)
+#model_save_path = dump_params(params)
 
 
 if __name__ == "__main__":
+    is_ddp, local_rank =setup() # !
+
+    model_save_path = dump_params(params)   # !
+
     seed_everything(params["random_seed"])
 
     session_train, session_test = load_sessions(data_dir=params["data_dir"])
     ext = FeatureExtractor(**params)
 
-    session_train = ext.fit_transform(session_train)
-    session_test = ext.transform(session_test, datatype="test")
+    # cache handling for DDP; same as LSTM
+    # try main process instead of local rank
+    if params["cache"] and (not is_ddp or local_rank == 0):
+        shutil.rmtree(getattr(ext, "cache_dir", "./cache"), ignore_errors=True)
+        os.makedirs(ext.cache_dir, exist_ok=True)
+
+    if is_ddp:
+        dist.barrier(device_ids=[local_rank])   # !
+
+    if params["cache"] and is_ddp:
+        if is_main_process():   # try this instead of rank0
+            ext.fit(session_train)
+            session_train = ext.transform(session_dict=session_train, datatype="train")
+            session_test = ext.transform(session_dict=session_test, datatype="test")
+        # wait for files
+        dist.barrier(device_ids=[local_rank])  # !
+        if not is_main_process():
+            assert ext.load(), f'Rank {local_rank} failed to load cached feature extractor.'
+            session_train = ext.transform(session_dict=session_train, datatype="train")  # loads train.pkl
+            session_test = ext.transform(session_dict=session_test, datatype="test")  # loads test.pkl
+    else:
+        session_train = ext.fit_transform(session_train)
+        session_test = ext.transform(session_test, datatype="test")
+
+    #session_train = ext.fit_transform(session_train)
+    #session_test = ext.transform(session_test, datatype="test")
 
     dataset_train = log_dataset(session_train, feature_type=params["feature_type"])
+    train_sampler = DistributedSampler(dataset_train, shuffle=True, drop_last=False)    # !
     dataloader_train = DataLoader(
-        dataset_train, batch_size=params["batch_size"], shuffle=True, pin_memory=True
+        dataset_train,
+        batch_size=params["batch_size"],
+        shuffle=(train_sampler is None),    # !
+        pin_memory=True,
+        num_workers=3,
+        persistent_workers=True,
+        prefetch_factor=4
     )
 
     dataset_test = log_dataset(session_test, feature_type=params["feature_type"])
     dataloader_test = DataLoader(
-        dataset_test, batch_size=4096, shuffle=False, pin_memory=True
+        dataset_test,
+        batch_size=4096,
+        shuffle=False,
+        pin_memory=True,
+        num_workers=1,
+        persistent_workers=False
     )
 
     model = Transformer(
@@ -86,18 +133,34 @@ if __name__ == "__main__":
         learning_rate=params["learning_rate"],
     )
 
-    result_str = "\t".join(["{}-{:.4f}".format(k, v) for k, v in eval_results.items()])
+    if is_main_process():  # only rank 0 formats eval_results
+        result_str = "\t".join(["{}-{:.4f}".format(k, v) for k, v in eval_results.items()])
 
-    key_info = [
-        "dataset",
-        "train_anomaly_ratio",
-        "feature_type",
-        "label_type",
-        "use_attention",
-    ]
+        key_info = [
+            "dataset",
+            "train_anomaly_ratio",
+            "feature_type",
+            "label_type",
+            "use_attention",
+        ]
 
-    args_str = "\t".join(
-        ["{}:{}".format(k, v) for k, v in params.items() if k in key_info]
-    )
+        args_str = "\t".join(
+            ["{}:{}".format(k, v) for k, v in params.items() if k in key_info]
+        )
+        print(eval_results)
 
-    dump_final_results(params, eval_results, model)
+        dump_final_results(params, eval_results, model)
+
+    # clean cache
+    if params["cache"] and is_ddp:
+        shutil.rmtree(getattr(ext, "cache_dir", "./cache"), ignore_errors=True)
+
+    # destroy DDP process group
+    try:
+        del dataloader_train
+        del dataloader_test
+    except NameError:
+        pass
+    if dist.is_initialized():
+        dist.barrier()
+    cleanup()
