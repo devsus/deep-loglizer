@@ -40,7 +40,7 @@ class Transformer(ForcastBasedModel):
         self.use_tfidf = use_tfidf
 
         self.cls = torch.zeros(1, 1, embedding_dim).to(self.device)
-        encoder_layer = nn.TransformerEncoderLayer(embedding_dim, nhead, hidden_size)
+        encoder_layer = nn.TransformerEncoderLayer(embedding_dim, nhead, hidden_size, batch_first=True) # !
         self.transformer_encoder = nn.TransformerEncoder(
             encoder_layer, num_layers=num_layers
         )
@@ -61,12 +61,14 @@ class Transformer(ForcastBasedModel):
             if not self.use_tfidf:
                 x = x.sum(dim=-2)  # add tf-idf
 
-        x_t = x.transpose(1, 0)
+        #x_t = x.transpose(1, 0)
         # cls_expand = self.cls.expand(-1, self.batch_size, -1)
         # embedding_with_cls = torch.cat([cls_expand, x_t], dim=0)
 
-        x_transformed = self.transformer_encoder(x_t.float())
-        representation = x_transformed.transpose(1, 0).mean(dim=1)
+        x_transformed = self.transformer_encoder(x.float()) # !
+        representation = x_transformed.mean(dim=1) # !
+        #x_transformed = self.transformer_encoder(x_t.float())
+        #representation = x_transformed.transpose(1, 0).mean(dim=1)
         # representation = x_transformed[0]
 
         logits = self.prediction_layer(representation)

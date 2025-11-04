@@ -16,3 +16,5 @@
   - optimizer Adam outside of training loop
   
   - use `weights_only=True` when loading model’s pure state dict (secure)
+  
+  - use atch_first=true'in Transformer instead of transpose (performance)
