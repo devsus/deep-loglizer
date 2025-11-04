@@ -7,7 +7,7 @@ def setup() -> tuple[bool, int]:
         local_rank = int(os.environ["LOCAL_RANK"])
         torch.cuda.set_device(local_rank)
         if not dist.is_initialized():
-            dist.init_process_group(backend="nccl")
+            dist.init_process_group(backend="nccl", device_id=torch.device(f"cuda:{local_rank}"))   # gloo ?
         return True, local_rank
     return False, 0
 

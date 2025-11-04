@@ -75,12 +75,12 @@ if __name__ == "__main__":
 
     # cache handling for DDP; same as LSTM
     # try main process instead of local rank
-    if params["cache"] and (not is_ddp or local_rank == 0):
+    if params["cache"] and (not is_ddp or is_main_process()):
         shutil.rmtree(getattr(ext, "cache_dir", "./cache"), ignore_errors=True)
         os.makedirs(ext.cache_dir, exist_ok=True)
 
     if is_ddp:
-        dist.barrier(device_ids=[local_rank])   # !
+        dist.barrier()   # !
 
     if params["cache"] and is_ddp:
         if is_main_process():   # try this instead of rank0
@@ -88,7 +88,7 @@ if __name__ == "__main__":
             session_train = ext.transform(session_dict=session_train, datatype="train")
             session_test = ext.transform(session_dict=session_test, datatype="test")
         # wait for files
-        dist.barrier(device_ids=[local_rank])  # !
+        dist.barrier()  # !
         if not is_main_process():
             assert ext.load(), f'Rank {local_rank} failed to load cached feature extractor.'
             session_train = ext.transform(session_dict=session_train, datatype="train")  # loads train.pkl

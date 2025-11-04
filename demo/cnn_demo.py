@@ -4,8 +4,6 @@ import os
 import shutil
 import sys
 
-from deeploglizer.common.ddp import setup, is_main_process, cleanup
-
 sys.path.append("../")
 import argparse
 from torch.utils.data import DataLoader, DistributedSampler
@@ -15,7 +13,7 @@ from deeploglizer.models import CNN
 from deeploglizer.common.dataloader import load_sessions, log_dataset
 from deeploglizer.common.preprocess import FeatureExtractor
 from deeploglizer.common.utils import seed_everything, dump_final_results, dump_params
-
+from deeploglizer.common.ddp import setup, is_main_process, cleanup
 
 parser = argparse.ArgumentParser()
 

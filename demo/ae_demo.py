@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+
+import sys
+sys.path.append("../")
 import os
 import shutil
-import sys
+
 
 from deeploglizer.common.ddp import setup, is_main_process, cleanup
-
-sys.path.append("../")
 import argparse
 from torch.utils.data import DataLoader, DistributedSampler
 import torch.distributed as dist
