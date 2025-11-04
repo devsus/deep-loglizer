@@ -244,12 +244,15 @@ class ForcastBasedModel(nn.Module):
             for topk in range(1, self.topk + 1):
                 pred = (session_df[f"window_pred_anomaly_{topk}"] > 0).astype(int)
                 y = (session_df["window_anomalies"] > 0).astype(int)
-                window_topk_acc = 1 - store_df["window_anomalies"].sum() / len(store_df)
+
+                #window_topk_acc = 1 - store_df["window_anomalies"].sum() / len(store_df)
+                window_topk_acc = float(hit_df[topk].mean())    # bogus?
+
                 eval_results = {
                     "f1": f1_score(y, pred),
                     "rc": recall_score(y, pred),
                     "pc": precision_score(y, pred),
-                    "top{}-acc".format(topk): window_topk_acc,
+                    "top{}-acc".format(topk): float(window_topk_acc),
                 }
                 logging.info({k: f"{v:.3f}" for k, v in eval_results.items()})
                 if eval_results["f1"] >= best_f1:
