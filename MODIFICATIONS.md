@@ -20,3 +20,5 @@
   - use atch_first=true'in Transformer instead of transpose (performance)
   
   - calculate true top-k acc in base_model.py
+  
+  - fixed 'kwargs' bug in models

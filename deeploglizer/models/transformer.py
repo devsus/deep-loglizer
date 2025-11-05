@@ -33,6 +33,7 @@ class Transformer(ForcastBasedModel):
             embedding_dim=embedding_dim,
             freeze=freeze,
             gpu=gpu,
+            **kwargs
         )
         num_labels = meta_data["num_labels"]
         self.feature_type = feature_type
