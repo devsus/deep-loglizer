@@ -206,7 +206,7 @@ class ForcastBasedModel(nn.Module):
 
             count_start = time.time()
 
-            topkdf = pd.DataFrame(store_df["y_pred_topk"].tolist())
+            """topkdf = pd.DataFrame(store_df["y_pred_topk"].tolist())
             logging.info("Calculating acc sum.")
             hit_df = pd.DataFrame()
             for col in sorted(topkdf.columns):
@@ -226,6 +226,21 @@ class ForcastBasedModel(nn.Module):
                 store_df["window_pred_anomaly_{}".format(topk)] = (
                     ~(hit_df["acc_num"] <= check_num)
                 ).astype(int)
+            # store_df.to_csv("store_{}_2.csv".format(dtype), index=False)"""
+
+            # True top-k accuracy - ChatGPT 5
+            topkdf = pd.DataFrame(store_df["y_pred_topk"].tolist())
+            # bool matrix: prediction at rank j equals true label
+            eq_mat = topkdf.eq(store_df["window_labels"].to_numpy(), axis=0)
+
+            # build window_pred_anomaly_k and cache top-k accuracies
+            topk_acc = {}
+            for col in sorted(topkdf.columns):
+                topk = col + 1
+                # hit if true label appears anywhere within first k predictions
+                hit_k = eq_mat.iloc[:, :topk].any(axis=1)
+                store_df[f"window_pred_anomaly_{topk}"] = (~hit_k).astype(int)
+                topk_acc[topk] = float(hit_k.mean())
             # store_df.to_csv("store_{}_2.csv".format(dtype), index=False)
 
             logging.info("Finish generating store_df.")
@@ -246,7 +261,8 @@ class ForcastBasedModel(nn.Module):
                 y = (session_df["window_anomalies"] > 0).astype(int)
 
                 #window_topk_acc = 1 - store_df["window_anomalies"].sum() / len(store_df)
-                window_topk_acc = float(hit_df[topk].mean())    # bogus?
+                # window_topk_acc = float(hit_df[topk].mean())
+                window_topk_acc = topk_acc[topk]    # !
 
                 eval_results = {
                     "f1": f1_score(y, pred),

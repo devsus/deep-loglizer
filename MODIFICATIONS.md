@@ -18,3 +18,5 @@
   - use `weights_only=True` when loading model’s pure state dict (secure)
   
   - use atch_first=true'in Transformer instead of transpose (performance)
+  
+  - calculate true top-k acc in base_model.py
