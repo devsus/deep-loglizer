@@ -56,8 +56,8 @@ parser.add_argument("--patience", default=3, type=int)
 ##### Others
 parser.add_argument("--random_seed", default=42, type=int)
 parser.add_argument("--gpu", default=0, type=int)
-parser.add_argument("--multi_gpu", action="store_true") #!
-parser.add_argument("--cache", action="store_true") #!
+#parser.add_argument("--multi_gpu", action="store_true") #!
+#parser.add_argument("--cache", action="store_true") #!
 
 params = vars(parser.parse_args())
 
@@ -66,28 +66,32 @@ params = vars(parser.parse_args())
 if __name__ == "__main__":
     is_ddp, local_rank, world_size = setup() #!
 
-    model_save_path = dump_params(params)
+    # quick fix for using cache when running DDP
+    params["cache"] = (world_size > 1)
 
-    seed_everything(params["random_seed"])
-
-    # quickfix scale batch size for DDP
+    # quick fix to scale batch size for DDP
     auto_scaled = False
     if world_size > 1:
         per_rank = max(1, params["batch_size"] // world_size)
         params["batch_size"] = per_rank
         auto_scaled = True
+
+    model_save_path = dump_params(params)
+
+    seed_everything(params["random_seed"])
+
+
     effective_global = params["batch_size"] * world_size
     if is_main_process():
         logging.info(f"DDP world size: {world_size} "
-                     f"Effective global batch: {effective_global} "
-                     f"Per rank batch: {params["batch_size"]} "
+                     f"Effective global batch size: {effective_global} "
+                     f"Per rank batch size: {params["batch_size"]} "
                      f"Autoscaled: {auto_scaled}")
 
     session_train, session_test = load_sessions(data_dir=params["data_dir"])
 
     ext = FeatureExtractor(**params)
 
-    # quick fix for using cache when running DDP
     # fresh cache for this run
     if params["cache"] and (not is_ddp or local_rank == 0):
         shutil.rmtree(getattr(ext, "cache_dir", "./cache"), ignore_errors=True)

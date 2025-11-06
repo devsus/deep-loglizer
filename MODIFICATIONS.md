@@ -22,3 +22,5 @@
   - calculate true top-k acc in base_model.py
   
   - fixed 'kwargs' bug in models
+  
+  - per rank batch scaling when using DDP
