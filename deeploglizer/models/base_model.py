@@ -230,6 +230,7 @@ class ForcastBasedModel(nn.Module):
 
             # True top-k accuracy - ChatGPT 5
             topkdf = pd.DataFrame(store_df["y_pred_topk"].tolist())
+            logging.info("Calculating acc sum.")
             # bool matrix: prediction at rank j equals true label
             eq_mat = topkdf.eq(store_df["window_labels"].to_numpy(), axis=0)
 
@@ -261,7 +262,7 @@ class ForcastBasedModel(nn.Module):
                 y = (session_df["window_anomalies"] > 0).astype(int)
 
                 #window_topk_acc = 1 - store_df["window_anomalies"].sum() / len(store_df)
-                # window_topk_acc = float(hit_df[topk].mean())
+                #window_topk_acc = float(hit_df[topk].mean())
                 window_topk_acc = topk_acc[topk]    # !
 
                 eval_results = {

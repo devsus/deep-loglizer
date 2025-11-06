@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import hashlib
 import logging
+import math
 import os
 import shutil
 import sys
@@ -63,11 +64,24 @@ params = vars(parser.parse_args())
 # model_save_path = dump_params(params)
 
 if __name__ == "__main__":
-    is_ddp, local_rank = setup() #!
+    is_ddp, local_rank, world_size = setup() #!
 
     model_save_path = dump_params(params)
 
     seed_everything(params["random_seed"])
+
+    # quickfix scale batch size for DDP
+    auto_scaled = False
+    if world_size > 1:
+        per_rank = max(1, params["batch_size"] // world_size)
+        params["batch_size"] = per_rank
+        auto_scaled = True
+    effective_global = params["batch_size"] * world_size
+    if is_main_process():
+        logging.info(f"DDP world size: {world_size} "
+                     f"Effective global batch: {effective_global} "
+                     f"Per rank batch: {params["batch_size"]} "
+                     f"Autoscaled: {auto_scaled}")
 
     session_train, session_test = load_sessions(data_dir=params["data_dir"])
 
@@ -81,7 +95,7 @@ if __name__ == "__main__":
 
     # all ranks see post-clean state
     if is_ddp:
-        dist.barrier(device_ids=[local_rank])
+        dist.barrier()
 
     # rank0 does preprocessing once; others only read
     if params["cache"] and is_ddp:
@@ -90,7 +104,7 @@ if __name__ == "__main__":
             session_train = ext.transform(session_dict=session_train, datatype="train")  # writes train.pkl :contentReference[oaicite:4]{index=4}
             session_test = ext.transform(session_dict=session_test, datatype="test")
         # wait for files
-        dist.barrier(device_ids=[local_rank])   # !
+        dist.barrier()   # !
         if local_rank > 0:
             assert ext.load(), f'Rank {local_rank} failed to load cached feature extractor.'
             session_train = ext.transform(session_dict=session_train, datatype="train")  # loads train.pkl

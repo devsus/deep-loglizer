@@ -64,7 +64,7 @@ params = vars(parser.parse_args())
 
 
 if __name__ == "__main__":
-    is_ddp, local_rank = setup()
+    is_ddp, local_rank, world_size = setup()
 
     model_save_path = dump_params(params)
 
@@ -104,7 +104,8 @@ if __name__ == "__main__":
     dataloader_train = DataLoader(
         dataset_train,
         batch_size=params["batch_size"],
-        shuffle=True,
+        shuffle=(train_sampler is None),
+        sampler=train_sampler,
         pin_memory=True,
         num_workers=3,
         persistent_workers=True,

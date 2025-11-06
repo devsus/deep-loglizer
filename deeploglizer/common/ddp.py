@@ -2,14 +2,15 @@ import os
 import torch
 import torch.distributed as dist
 
-def setup() -> tuple[bool, int]:
+def setup() -> tuple[bool, int, int]:
     if "LOCAL_RANK" in os.environ:
         local_rank = int(os.environ["LOCAL_RANK"])
         torch.cuda.set_device(local_rank)
         if not dist.is_initialized():
             dist.init_process_group(backend="nccl", device_id=torch.device(f"cuda:{local_rank}"))   # gloo ?
-        return True, local_rank
-    return False, 0
+        world_size = dist.get_world_size()
+        return True, local_rank, world_size
+    return False, 0, 1
 
 def cleanup():
     if dist.is_initialized():

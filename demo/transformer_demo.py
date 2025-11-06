@@ -64,7 +64,7 @@ params = vars(parser.parse_args())
 
 
 if __name__ == "__main__":
-    is_ddp, local_rank =setup() # !
+    is_ddp, local_rank, world_size = setup() # !
 
     model_save_path = dump_params(params)   # !
 
