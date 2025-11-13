@@ -3,6 +3,7 @@ import time
 import torch
 import torch.distributed as dist
 import logging
+import math
 import numpy as np
 import pandas as pd
 from torch import nn
@@ -297,7 +298,15 @@ class ForcastBasedModel(nn.Module):
         logging.info("Loading model from {}".format(self.model_save_file))
         self.load_state_dict(torch.load(model_save_file, map_location=self.device, weights_only=True)) # !
 
-    def fit(self, train_loader, test_loader=None, epoches=10, learning_rate=1.0e-3):
+    def fit(
+            self,
+            train_loader,
+            test_loader=None,
+            epoches=10,
+            learning_rate=1.0e-3,
+            lr_scheduler=None,
+            lr_target=None,
+            warmup_steps=0):    #!
         # detect DDP and set the correct CUDA device
         is_ddp = dist.is_initialized()
         local_rank = int(os.environ["LOCAL_RANK"]) if is_ddp else 0
@@ -312,6 +321,27 @@ class ForcastBasedModel(nn.Module):
             model = DDP(self, device_ids=[local_rank], output_device=local_rank)
 
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate) # !
+
+        # ---- LR schedule: warmup to lr_target, then cosine back to base ----
+        base_lr = float(learning_rate)
+        target_lr = float(lr_target) if lr_target is not None else base_lr
+        total_steps = max(1, epoches * len(train_loader))
+        warmup_steps = int(warmup_steps)
+
+        def lr_at_step(step_idx: int) -> float:
+            # step_idx is 0-based; we set LR *before* optimizer.step()
+            if lr_scheduler is None or target_lr == base_lr:
+                return base_lr
+            if step_idx < warmup_steps:
+                # linear warmup from base_lr -> target_lr
+                alpha = (step_idx + 1) / max(1, warmup_steps)
+                return base_lr + (target_lr - base_lr) * alpha
+            # cosine decay from target_lr -> base_lr across the remaining steps
+            remain = max(1, total_steps - warmup_steps)
+            progress = min(1.0, (step_idx - warmup_steps) / remain)
+            return base_lr + 0.5 * (target_lr - base_lr) * (1.0 + math.cos(math.pi * progress))
+
+        # --------------------------------------------------------------------
 
         logging.info(
             "Start training on {} batches with {}.".format(
@@ -335,11 +365,18 @@ class ForcastBasedModel(nn.Module):
             batch_cnt = 0
             epoch_loss_num = 0.0  # sum off loss * batch_size across all ranks
             sample_count = 0.0 # total samples across all ranks
+            global_step = 0
             for batch_input in train_loader:
+                # set per-step LR
+                current_lr = lr_at_step(global_step)    #!
+                for g in optimizer.param_groups:
+                    g["lr"] = current_lr
+
                 loss = model.forward(self.__input2device(batch_input))["loss"]
                 loss.backward()
                 optimizer.step()
                 optimizer.zero_grad()
+                global_step += 1    #!
 
                 # global reduction for logging
                 # batch size (first tensor in batch; all share leading dim)
@@ -363,9 +400,9 @@ class ForcastBasedModel(nn.Module):
             epoch_time_elapsed = time.time() - epoch_time_start
             if is_main_process(): #!
                 logging.info(
-                    "Epoch {}/{}, training loss: {:.5f} [{:.2f}s]".format(
-                        epoch, epoches, epoch_loss, epoch_time_elapsed)
-                )
+                    "Epoch {}/{}, training loss: {:.5f} [{:.2f}s], lr {:.6f}".format(
+                        epoch, epoches, epoch_loss, epoch_time_elapsed, current_lr)
+                )   #!
             self.time_tracker["train"] = epoch_time_elapsed
 
             if dist.is_initialized(): #!

@@ -50,6 +50,9 @@ parser.add_argument("--min_token_count", default=1, type=int)
 parser.add_argument("--epoches", default=100, type=int)
 parser.add_argument("--batch_size", default=1024, type=int)
 parser.add_argument("--learning_rate", default=0.01, type=float)
+parser.add_argument("--lr_scheduler", action="store_true")   #!
+parser.add_argument("--lr_target", type=float, default=None)    #!
+parser.add_argument("--warmup_steps", type=int, default=0)  #!
 parser.add_argument("--topk", default=10, type=int)
 parser.add_argument("--patience", default=3, type=int)
 
@@ -152,6 +155,9 @@ if __name__ == "__main__":
         test_loader=dataloader_test,
         epoches=params["epoches"],
         learning_rate=params["learning_rate"],
+        lr_scheduler=params["lr_scheduler"],    #!
+        lr_target=params["lr_target"],  #!
+        warmup_steps=params["warmup_steps"],    #!
     )
 
     if is_main_process(): # only rank 0 formats eval_results
