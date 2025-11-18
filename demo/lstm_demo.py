@@ -16,6 +16,8 @@ from deeploglizer.common.preprocess import FeatureExtractor
 from deeploglizer.common.dataloader import load_sessions, log_dataset
 from deeploglizer.common.utils import seed_everything, dump_final_results, dump_params
 from deeploglizer.common.ddp import setup, cleanup, is_main_process
+from deeploglizer.common.hetero_batch import HeteroBatchSampler, compute_per_rank_batch_sizes
+
 
 parser = argparse.ArgumentParser()
 
@@ -61,6 +63,7 @@ parser.add_argument("--random_seed", default=42, type=int)
 parser.add_argument("--gpu", default=0, type=int)
 #parser.add_argument("--multi_gpu", action="store_true") #!
 #parser.add_argument("--cache", action="store_true") #!
+parser.add_argument("--hetero_batch", action="store_true")  #!
 
 params = vars(parser.parse_args())
 
@@ -73,11 +76,11 @@ if __name__ == "__main__":
     params["cache"] = (world_size > 1)
 
     # quick fix to scale batch size for DDP
-    auto_scaled = False
+    """auto_scaled = False
     if world_size > 1:
         per_rank = max(1, params["batch_size"] // world_size)
         params["batch_size"] = per_rank
-        auto_scaled = True
+        auto_scaled = True"""
 
     model_save_path = dump_params(params)
 
@@ -85,11 +88,11 @@ if __name__ == "__main__":
 
 
     effective_global = params["batch_size"] * world_size
-    if is_main_process():
+    """if is_main_process():
         logging.info(f"DDP world size: {world_size} "
                      f"Effective global batch size: {effective_global} "
                      f"Per rank batch size: {params["batch_size"]} "
-                     f"Autoscaled: {auto_scaled}")
+                     f"Autoscaled: {auto_scaled}")"""
 
     session_train, session_test = load_sessions(data_dir=params["data_dir"])
 
@@ -125,18 +128,66 @@ if __name__ == "__main__":
     # session_train = ext.fit_transform(session_train)
     # session_test = ext.transform(session_test, datatype="test")
 
+    global_batch = params["batch_size"]
     dataset_train = log_dataset(session_train, feature_type=params["feature_type"])
-    train_sampler = DistributedSampler(dataset_train, shuffle=True, drop_last=False) if is_ddp else None #! !
-    dataloader_train = DataLoader(
-        dataset_train,
-        batch_size=params["batch_size"],
-        shuffle=(train_sampler is None), # only shuffle when not distributed
-        sampler=train_sampler,  #!
-        pin_memory=True,
-        num_workers=3, #!
-        persistent_workers=True,
-        prefetch_factor=4
-    )
+    if is_ddp and params["hetero_batch"]:
+        # quick fix, maybe change later
+        # ratios are relative weights, not %
+        ratios = [3.0, 1.0, 1.0]
+        per_rank_batch_sizes = compute_per_rank_batch_sizes(
+            global_batch_size=global_batch,
+            world_size=world_size,
+            ratios=ratios,
+        )
+
+        if is_main_process():
+            logging.info(
+                f"hetero batches enabled, global batch: {global_batch}, "
+                f"per-rank batch sizes: {per_rank_batch_sizes}"
+            )
+
+        batch_sampler = HeteroBatchSampler(
+            dataset_size=len(dataset_train),
+            rank=local_rank,
+            world_size=world_size,
+            per_rank_batch_sizes=per_rank_batch_sizes,
+            seed=params["random_seed"],
+        )
+
+        dataloader_train = DataLoader(
+            dataset_train,
+            batch_sampler=batch_sampler,
+            pin_memory=True,
+            num_workers=3,
+            persistent_workers=True,
+            prefetch_factor=4,
+        )
+    else:
+        train_sampler = DistributedSampler(dataset_train, shuffle=True, drop_last=False) if is_ddp else None #! !
+
+        if is_ddp and world_size > 1:
+            per_rank = max(1, global_batch // world_size)
+        else:
+            per_rank = global_batch
+
+        if is_main_process():
+            effective_global = per_rank * world_size
+            logging.info(
+                f"homo batches, per-rank: {per_rank}, "
+                f"world size: {world_size}, effective global: {effective_global}"
+            )
+
+        dataloader_train = DataLoader(
+            dataset_train,
+            #batch_size=params["batch_size"],
+            batch_size=per_rank,
+            shuffle=(train_sampler is None), # only shuffle when not distributed
+            sampler=train_sampler,  #!
+            pin_memory=True,
+            num_workers=3, #!
+            persistent_workers=True,
+            prefetch_factor=4
+        )
 
     dataset_test = log_dataset(session_test, feature_type=params["feature_type"])
     dataloader_test = DataLoader(

@@ -6,6 +6,7 @@ import logging
 import math
 import numpy as np
 import pandas as pd
+from fontTools.misc.arrayTools import scaleRect
 from torch import nn
 from collections import defaultdict
 from sklearn.metrics import accuracy_score, f1_score, recall_score, precision_score
@@ -310,6 +311,7 @@ class ForcastBasedModel(nn.Module):
         # detect DDP and set the correct CUDA device
         is_ddp = dist.is_initialized()
         local_rank = int(os.environ["LOCAL_RANK"]) if is_ddp else 0
+        world_size = dist.get_world_size() if is_ddp else 1
         self.device = torch.device(f'cuda:{local_rank}') if torch.cuda.is_available() else torch.device("cpu")
 
         self.to(self.device)
@@ -322,7 +324,7 @@ class ForcastBasedModel(nn.Module):
 
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate) # !
 
-        # ---- LR schedule: warmup to lr_target, then cosine back to base ----
+       #    need scheduler??
         base_lr = float(learning_rate)
         target_lr = float(lr_target) if lr_target is not None else base_lr
         total_steps = max(1, epoches * len(train_loader))
@@ -341,8 +343,6 @@ class ForcastBasedModel(nn.Module):
             progress = min(1.0, (step_idx - warmup_steps) / remain)
             return base_lr + 0.5 * (target_lr - base_lr) * (1.0 + math.cos(math.pi * progress))
 
-        # --------------------------------------------------------------------
-
         logging.info(
             "Start training on {} batches with {}.".format(
                 len(train_loader), self.device
@@ -354,8 +354,12 @@ class ForcastBasedModel(nn.Module):
         for epoch in range(1, epoches + 1):
             epoch_time_start = time.time()
 
+            # homo DDP reshuffle
             if hasattr(train_loader, "sampler") and hasattr(train_loader.sampler, "set_epoch"):
                 train_loader.sampler.set_epoch(epoch)
+            # hetero DDP reshuffle
+            if hasattr(train_loader, "batch_sampler") and hasattr(train_loader.batch_sampler, "set_epoch"):
+                batch_sampler = train_loader.batch_sampler
 
             #model = self.train()
             #model = self.__wrap_model()
@@ -372,16 +376,38 @@ class ForcastBasedModel(nn.Module):
                 for g in optimizer.param_groups:
                     g["lr"] = current_lr
 
-                loss = model.forward(self.__input2device(batch_input))["loss"]
-                loss.backward()
-                optimizer.step()
-                optimizer.zero_grad()
-                global_step += 1    #!
-
                 # global reduction for logging
                 # batch size (first tensor in batch; all share leading dim)
                 first_tensor = next(iter(batch_input.values()))
                 batch_size = int(first_tensor.size(0))
+
+                # forward
+                loss = model.forward(self.__input2device(batch_input))["loss"]
+
+                # gradient scaling sample-weighted (like HetSeq)
+                if is_ddp:
+                    batch_sz_tensor = torch.tensor(
+                        [batch_size],
+                        dtype=loss.dtype,
+                        device=self.device,
+                    )
+                    dist.all_reduce(batch_sz_tensor, op=dist.ReduceOp.SUM)
+                    global_batch_size = batch_sz_tensor.item()
+
+                    if global_batch_size <= 0:
+                        scale = 1.0
+                    else:
+                        # α_i = world_size * (B_i / B_total)
+                        scale = world_size * (batch_size / global_batch_size)
+                    effective_loss = loss * scale
+                else:
+                    effective_loss = loss
+
+                # backward/update with scaled loss
+                effective_loss.backward()
+                optimizer.step()
+                optimizer.zero_grad()
+                global_step += 1    #!
 
                 # per-batch num = mean_loss * batch_size
                 loss_num = (loss.detach() * batch_size).to(self.device)
