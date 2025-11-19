@@ -21,8 +21,8 @@ data_name = f'hdfs_{params["train_anomaly_ratio"]}_tar'
 data_dir = "../data/processed/HDFS_100k"
 
 params = {
-    # "log_file": "../data/HDFS/HDFS.log_structured.csv",
-    "log_file": "../data/HDFS/HDFS_100k.log_structured.csv",
+    "log_file": "../data/HDFS/HDFS.log_structured.csv",
+    # "log_file": "../data/HDFS/HDFS_100k.log_structured.csv",
     "label_file": "../data/HDFS/anomaly_label.csv",
     "test_ratio": 0.2,
     "random_sessions": True,  # shuffle sessions

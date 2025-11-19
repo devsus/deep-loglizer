@@ -158,7 +158,7 @@ if __name__ == "__main__":
             dataset_train,
             batch_sampler=batch_sampler,
             pin_memory=True,
-            num_workers=3,
+            num_workers=2,
             persistent_workers=True,
             prefetch_factor=4,
         )
@@ -184,7 +184,7 @@ if __name__ == "__main__":
             shuffle=(train_sampler is None), # only shuffle when not distributed
             sampler=train_sampler,  #!
             pin_memory=True,
-            num_workers=3, #!
+            num_workers=12, #!
             persistent_workers=True,
             prefetch_factor=4
         )
