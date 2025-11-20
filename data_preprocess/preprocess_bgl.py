@@ -19,6 +19,7 @@ np.random.seed(seed)
 
 params = {
     "log_file": "../data/BGL/BGL.log_structured.csv",
+    # "log_file": "../data/BGL/BGL.log_structured_v2.csv",    #!
     "time_range": 21600,  # 6 hours
     "train_ratio": None,
     "test_ratio": 0.2,
