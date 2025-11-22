@@ -151,16 +151,6 @@ def load_HDFS(
     random_partition=False,
     **kwargs
 ):
-    """Load HDFS structured log into train and test data
-
-    Arguments
-    ---------
-        TODO
-
-    Returns
-    -------
-        TODO
-    """
     logging.info("Loading HDFS logs from {}.".format(log_file))
     struct_log = pd.read_csv(log_file, engine="c", na_filter=False, memory_map=True)
     # struct_log.sort_values(by=["Date", "Time"], inplace=True)

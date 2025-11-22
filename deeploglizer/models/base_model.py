@@ -257,7 +257,8 @@ class ForcastBasedModel(nn.Module):
                 )
             else:
                 session_df = store_df
-            # session_df.to_csv("session_{}_2.csv".format(dtype), index=False)
+            session_df.to_csv("session_{}_2.csv".format(dtype), index=False)
+
 
             for topk in range(1, self.topk + 1):
                 pred = (session_df[f"window_pred_anomaly_{topk}"] > 0).astype(int)
@@ -268,9 +269,9 @@ class ForcastBasedModel(nn.Module):
                 window_topk_acc = topk_acc[topk]    # !
 
                 eval_results = {
-                    "f1": f1_score(y, pred),
-                    "rc": recall_score(y, pred),
-                    "pc": precision_score(y, pred),
+                    "f1": f1_score(y, pred, zero_division=0),   #! zero for unlabeled data
+                    "rc": recall_score(y, pred, zero_division=0),
+                    "pc": precision_score(y, pred, zero_division=0),
                     "top{}-acc".format(topk): float(window_topk_acc),
                 }
                 logging.info({k: f"{v:.3f}" for k, v in eval_results.items()})
