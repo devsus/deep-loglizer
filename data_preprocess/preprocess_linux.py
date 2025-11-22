@@ -18,7 +18,7 @@ np.random.seed(seed)
 
 params = {
     "log_file": "../data/Linux/Linux.log_structured.csv",
-    "time_range": 6 * 3600,   # 6 hours, like BGL
+    "time_range": 21600,   # 6 hours
     "train_ratio": None,
     "test_ratio": 0.2,
     "random_sessions": True,
@@ -35,7 +35,6 @@ MONTH_MAP = {
 }
 
 def parse_linux_time(month_str, day_str, time_str):
-    """Return seconds since an arbitrary epoch for Month/Day/Time."""
     month_str = str(month_str).strip()
     day_str = str(day_str).strip()
     time_str = str(time_str).strip()
@@ -56,15 +55,11 @@ def parse_linux_time(month_str, day_str, time_str):
     except Exception:
         return None
 
-    # Map Month/Day/Time into a synthetic linear time axis (seconds)
-    # Year doesn’t matter; we just need ordering and intervals.
     month = MONTH_MAP[month_str]
-    # naive month->day offset to keep things monotonic
     day_offset = (month - 1) * 31
     total_days = day_offset + (day - 1)
     seconds = total_days * 24 * 3600 + hh * 3600 + mm * 60 + ss
     return seconds
-
 
 def load_Linux(
     log_file,
@@ -80,7 +75,9 @@ def load_Linux(
     # synthetic label: no ground truth, treat all as normal for now
     struct_log["Label"] = 0
 
-    # we expect Month / Day / Time / EventTemplate columns from Drain
+    template_col = "EventTemplate"
+    content_col = "Content"
+
     for col in ["Month", "Day", "Time", "EventTemplate"]:
         if col not in struct_log.columns:
             raise ValueError(f"Expected column '{col}' in {log_file}, got {list(struct_log.columns)}")

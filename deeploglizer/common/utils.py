@@ -47,6 +47,34 @@ def dump_final_results(params, eval_results, model):
         )
         fw.write(info)
 
+    #aggregated runtime metrics
+    try:
+        save_dir = os.path.join("./experiment_records", params["hash_id"])
+        os.makedirs(save_dir, exist_ok=True)
+
+        metrics = {}
+
+        epoch_times = model.time_tracker.get("train_epoch_times", [])
+        epoch_times_arr = np.array(epoch_times)
+        metrics["train_epochs"] = epoch_times_arr.size
+        metrics["train_epoch_time_mean_sec"] = epoch_times_arr.mean()
+        metrics["train_epoch_time_p95_sec"] = np.percentile(epoch_times_arr, 95)
+
+        epoch_throughput = model.time_tracker.get("train_epoch_throughput", [])
+        thr_arr = np.array(epoch_throughput)
+        metrics["train_throughput_mean_samples_sec"] = thr_arr.mean()
+        metrics["train_throughput_mean_p95_samples_sec"] = np.percentile(thr_arr, 95)
+
+        train_total = model.time_tracker.get("train_total")
+        metrics["train_total_time_sec"] = train_total
+
+        metrics["world_size"] = model.world_size
+
+        metrics_path = os.path.join(save_dir, "metrics.json")
+        json_pretty_dump(metrics, metrics_path)
+    except Exception as e:
+        logging.warning(f"Failed to dump metrics: {e}")
+
 # quick fix for duplicate stdout
 def dump_params(params):
     hash_id = params.get("hash_id") #!

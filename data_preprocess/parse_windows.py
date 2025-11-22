@@ -4,33 +4,14 @@ import shutil
 from logparser.Drain import LogParser
 import pandas as pd
 
-# ----------------------------------------------------------------------
-# Paths — ADJUST these for your setup
-# ----------------------------------------------------------------------
-# Raw full Windows log from LogHub (the big one, not the 2k sample)
-INPUT_LOG = "../data/Windows/Windows.log"          # e.g. CBS.log or whatever you named it
-
-# Directory where Drain will drop *_structured.csv and *_templates.csv
+INPUT_LOG = "../data/Windows/Windows.log"
 OUT_DIR   = "../data/Windows"
-
-# Final structured CSV you will feed into preprocess_windows.py
 CSV_OUT   = "../data/Windows/Windows.log_structured.csv"
 
 os.makedirs(OUT_DIR, exist_ok=True)
 
-# ----------------------------------------------------------------------
-# Drain configuration
-# ----------------------------------------------------------------------
-# Raw line shape (CBS example):
-# 2016-09-28 04:30:30, Info                  CBS    Starting TrustedInstaller initialization.
-#
-# -> we model as:
-# <Date> <Time>, <Level> <Component> <Content>
-
 log_format = "<Date> <Time>, <Level> <Component> <Content>"
 
-# Regexes to generalize variables into <*>
-# Tune later if needed; start conservative.
 regex = [
     r"(\d+\.){3}\d+",            # IPv4
     r"\d+",                      # plain numbers
@@ -43,26 +24,16 @@ parser = LogParser(
     indir=os.path.dirname(INPUT_LOG),
     outdir=OUT_DIR,
     rex=regex,
-    st=0.5,   # similarity threshold
-    depth=4,  # tree depth
+    st=0.5,
+    depth=4,
 )
 
-# ----------------------------------------------------------------------
-# Run Drain
-# ----------------------------------------------------------------------
-print(f"Parsing file: {INPUT_LOG}")
 parser.parse(os.path.basename(INPUT_LOG))
 
-# ----------------------------------------------------------------------
-# Find Drain's structured CSV and move it to CSV_OUT
-# ----------------------------------------------------------------------
 files = os.listdir(OUT_DIR)
 structured_files = [f for f in files if f.endswith("_structured.csv")]
-if not structured_files:
-    raise RuntimeError(f"No *_structured.csv produced in {OUT_DIR}")
 
 src = os.path.join(OUT_DIR, structured_files[0])
 
-# move or copy; move is cheaper
 shutil.move(src, CSV_OUT)
 print(f"Structured Windows log written to {CSV_OUT}")

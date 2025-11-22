@@ -69,7 +69,12 @@ class ForcastBasedModel(nn.Module):
         self.eval_type = eval_type
         self.anomaly_ratio = anomaly_ratio  # only used for auto encoder
         self.patience = patience
-        self.time_tracker = {}
+        self.time_tracker = {
+            "train_epoch_times": [],
+            "train_epoch_throughput": [],
+            "train_total": 0.0,
+        }  #! add structure for aggregates
+        self.world_size = 1     #!
 
         os.makedirs(model_save_path, exist_ok=True)
         self.model_save_file = os.path.join(model_save_path, "model.ckpt")
@@ -313,6 +318,7 @@ class ForcastBasedModel(nn.Module):
         is_ddp = dist.is_initialized()
         local_rank = int(os.environ["LOCAL_RANK"]) if is_ddp else 0
         world_size = dist.get_world_size() if is_ddp else 1
+        self.world_size = world_size    #!
         self.device = torch.device(f'cuda:{local_rank}') if torch.cuda.is_available() else torch.device("cpu")
 
         self.to(self.device)
@@ -326,12 +332,12 @@ class ForcastBasedModel(nn.Module):
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate) # !
 
        #    need scheduler??
-        base_lr = float(learning_rate)
+        """base_lr = float(learning_rate)
         target_lr = float(lr_target) if lr_target is not None else base_lr
         total_steps = max(1, epoches * len(train_loader))
-        warmup_steps = int(warmup_steps)
+        warmup_steps = int(warmup_steps)"""
 
-        def lr_at_step(step_idx: int) -> float:
+        """def lr_at_step(step_idx: int) -> float:
             # step_idx is 0-based; we set LR *before* optimizer.step()
             if lr_scheduler is None or target_lr == base_lr:
                 return base_lr
@@ -343,7 +349,7 @@ class ForcastBasedModel(nn.Module):
             remain = max(1, total_steps - warmup_steps)
             progress = min(1.0, (step_idx - warmup_steps) / remain)
             return base_lr + 0.5 * (target_lr - base_lr) * (1.0 + math.cos(math.pi * progress))
-
+"""
         logging.info(
             "Start training on {} batches with {}.".format(
                 len(train_loader), self.device
@@ -373,9 +379,9 @@ class ForcastBasedModel(nn.Module):
             global_step = 0
             for batch_input in train_loader:
                 # set per-step LR
-                current_lr = lr_at_step(global_step)    #!
+                """current_lr = lr_at_step(global_step)    #!
                 for g in optimizer.param_groups:
-                    g["lr"] = current_lr
+                    g["lr"] = current_lr"""
 
                 # global reduction for logging
                 # batch size (first tensor in batch; all share leading dim)
@@ -427,10 +433,21 @@ class ForcastBasedModel(nn.Module):
             epoch_time_elapsed = time.time() - epoch_time_start
             if is_main_process(): #!
                 logging.info(
-                    "Epoch {}/{}, training loss: {:.5f} [{:.2f}s], lr {:.6f}".format(
-                        epoch, epoches, epoch_loss, epoch_time_elapsed, current_lr)
+                    "Epoch {}/{}, training loss: {:.5f} [{:.2f}s]".format(
+                        epoch, epoches, epoch_loss, epoch_time_elapsed)
                 )   #!
             self.time_tracker["train"] = epoch_time_elapsed
+            # total train time
+            self.time_tracker["train_total"] = self.time_tracker.get("train_total", 0.0) + epoch_time_elapsed
+            # per epoch throughput
+            if sample_count > 0 and epoch_time_elapsed > 0:
+                epoch_throughput = sample_count / epoch_time_elapsed
+            else:
+                epoch_throughput = 0.0
+
+            self.time_tracker.setdefault("train_epoch_times", []).append(epoch_time_elapsed)
+            self.time_tracker.setdefault("train_epoch_throughput", []).append(epoch_throughput)
+            self.time_tracker["train_total_samples"] = self.time_tracker.get("train_total_samples", 0) + sample_count
 
             if dist.is_initialized(): #!
                 dist.barrier()

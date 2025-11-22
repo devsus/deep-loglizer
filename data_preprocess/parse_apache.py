@@ -2,26 +2,13 @@ import os
 import shutil
 from logparser.Drain import LogParser
 
-# ----------------------------------------------------------------------
-# Paths
-# ----------------------------------------------------------------------
-INPUT_LOG = "../data/Apache/Apache.log"        # cleaned Apache log
-OUT_DIR   = "../data/Apache"       # Drain output directory
+INPUT_LOG = "../data/Apache/Apache.log"
+OUT_DIR   = "../data/Apache"
 
 CSV_STRUCTURED_OUT = "../data/Apache/Apache.log_structured.csv"
 CSV_TEMPLATES_OUT  = "../data/Apache/Apache.log_templates.csv"
 
 os.makedirs(OUT_DIR, exist_ok=True)
-
-# ----------------------------------------------------------------------
-# Drain configuration
-# ----------------------------------------------------------------------
-# After precleaning, each line is just the message:
-# [notice] workerEnv.init() ok ...
-# [error] [client ...] Directory index forbidden by rule: /var/www/html/
-#
-# So we can use the trivial format:
-# <Content>
 
 log_format = "<Content>"
 
