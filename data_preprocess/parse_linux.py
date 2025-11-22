@@ -1,12 +1,20 @@
 import os
 import shutil
+from pathlib import Path
+
 from logparser.Drain import LogParser
 
-# ----------------------------------------------------------------------
-# Paths — adjust to your layout
-# ----------------------------------------------------------------------
-# Raw full Linux log from LogHub (NOT the 2k structured sample)
-INPUT_LOG = "../data/Linux/Linux.log"              # raw .log file
+
+
+src = Path("../data/Linux/Linux.log")
+dst = Path("../data/Linux/Linux_utf8.log")
+with src.open("rb") as fin, dst.open("w", encoding="utf-8") as fout:
+    for raw in fin:
+        fout.write(raw.decode("latin1", errors="ignore"))
+print("Converted to UTF-8")
+
+
+INPUT_LOG = "../data/Linux/Linux_utf8.log"              # raw .log file
 OUT_DIR   = "../data/Linux"      # where Drain writes CSVs
 
 # Final structured + templates CSVs you will feed into preprocess_linux.py
@@ -42,10 +50,6 @@ parser = LogParser(
     depth=4,  # tree depth
 )
 
-# ----------------------------------------------------------------------
-# Run Drain
-# ----------------------------------------------------------------------
-print(f"Parsing file: {INPUT_LOG}")
 parser.parse(os.path.basename(INPUT_LOG))
 
 # ----------------------------------------------------------------------
