@@ -68,6 +68,22 @@ def dump_final_results(params, eval_results, model):
         train_total = model.time_tracker.get("train_total")
         metrics["train_total_time_sec"] = train_total
 
+        max_alloc = model.time_tracker.get("gpu_train_max_memory_allocated_bytes")
+        metrics["gpu_train_max_memory_allocated_mb"] = max_alloc / (1024.0 ** 2)
+
+        max_reserved = model.time_tracker.get("gpu_train_max_memory_reserved_bytes")
+        metrics["gpu_train_max_memory_reserved_mb"] = max_reserved / (1024.0 ** 2)
+
+        util_samples = model.time_tracker.get("gpu_train_util_samples", [])
+        util_arr = np.asarray(util_samples)
+        metrics["gpu_train_util_mean_pct"] = util_arr.mean() if util_arr.size > 0 else None
+        metrics["gpu_train_util_p95_pct"] = np.percentile(util_arr, 95) if util_arr.size > 0 else None
+
+        mem_samples = model.time_tracker.get("gpu_train_mem_samples_bytes", [])
+        mem_arr = np.asarray(mem_samples)
+        metrics["gpu_train_mem_mean_mb"] = mem_arr.mean() / (1024 ** 2) if mem_arr.size > 0 else None
+        metrics["gpu_train_mem_p95_mb"] = (np.percentile(mem_arr, 95) / (1024 ** 2)) if mem_arr.size > 0 else None
+
         metrics["world_size"] = model.world_size
 
         metrics_path = os.path.join(save_dir, "metrics.json")

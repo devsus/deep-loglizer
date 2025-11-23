@@ -10,6 +10,7 @@ from fontTools.misc.arrayTools import scaleRect
 from torch import nn
 from collections import defaultdict
 from sklearn.metrics import accuracy_score, f1_score, recall_score, precision_score
+import pynvml
 
 from deeploglizer.common.utils import set_device, tensor2flatten_arr
 from deeploglizer.common.ddp import is_main_process
@@ -70,11 +71,22 @@ class ForcastBasedModel(nn.Module):
         self.anomaly_ratio = anomaly_ratio  # only used for auto encoder
         self.patience = patience
         self.time_tracker = {
+            "train": 0.0,
+            "test": 0.0,
+
             "train_epoch_times": [],
             "train_epoch_throughput": [],
             "train_total": 0.0,
+            "train_total_samples": 0.0,
+
+            "gpu_train_max_memory_allocated_bytes": 0,
+            "gpu_train_max_memory_reserved_bytes": 0,
+
+            "gpu_train_util_samples": [],
+            "gpu_train_mem_samples_bytes": []
         }  #! add structure for aggregates
         self.world_size = 1     #!
+        self._nvml_handle = None    #!
 
         os.makedirs(model_save_path, exist_ok=True)
         self.model_save_file = os.path.join(model_save_path, "model.ckpt")
@@ -323,6 +335,14 @@ class ForcastBasedModel(nn.Module):
 
         self.to(self.device)
 
+        try:
+            pynvml.nvmlInit()  # !
+            gpu_index = self.device.index if self.device.index is not None else 0
+            self._nvml_handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
+        except Exception as e:
+            logging.warning(f"NVML init failed on device {self.device}: {e}")
+
+
         # wrap once
         model = self
         if is_ddp:
@@ -360,6 +380,9 @@ class ForcastBasedModel(nn.Module):
         worse_count = 0
         for epoch in range(1, epoches + 1):
             epoch_time_start = time.time()
+            # reset peak memory stats for this epoch
+            if torch.cuda.is_available():
+                torch.cuda.reset_peak_memory_stats(self.device)
 
             # homo DDP reshuffle
             if hasattr(train_loader, "sampler") and hasattr(train_loader.sampler, "set_epoch"):
@@ -378,6 +401,8 @@ class ForcastBasedModel(nn.Module):
             sample_count = 0.0 # total samples across all ranks
             global_step = 0
             for batch_input in train_loader:
+                if torch.cuda.is_available():
+                    torch.cuda.reset_peak_memory_stats(self.device)
                 # set per-step LR
                 """current_lr = lr_at_step(global_step)    #!
                 for g in optimizer.param_groups:
@@ -416,6 +441,21 @@ class ForcastBasedModel(nn.Module):
                 optimizer.zero_grad()
                 global_step += 1    #!
 
+                # gpu sampling
+                batch_peak_alloc = torch.cuda.max_memory_allocated(self.device)
+                batch_peak_reserved = torch.cuda.max_memory_reserved(self.device)
+                if self._nvml_handle is not None:
+                    util = pynvml.nvmlDeviceGetUtilizationRates(self._nvml_handle)
+                    self.time_tracker["gpu_train_util_samples"].append(util.gpu)
+                    # self.time_tracker["gpu_train_mem_samples_bytes"].append(mem.used)
+                mem = self.time_tracker.get("gpu_train_mem_samples_bytes", [])
+                mem.append(batch_peak_alloc)
+                self.time_tracker["gpu_train_mem_samples_bytes"] = mem
+                prev_alloc = self.time_tracker.get("gpu_train_max_memory_allocated_bytes", 0)
+                prev_reserved = self.time_tracker.get("gpu_train_max_memory_reserved_bytes", 0)
+                self.time_tracker["gpu_train_max_memory_allocated_bytes"] = max(prev_alloc, batch_peak_alloc)
+                self.time_tracker["gpu_train_max_memory_reserved_bytes"] = max(prev_reserved, batch_peak_reserved)
+
                 # per-batch num = mean_loss * batch_size
                 loss_num = (loss.detach() * batch_size).to(self.device)
                 count = torch.tensor([batch_size], dtype=loss_num.dtype, device=self.device)
@@ -445,9 +485,20 @@ class ForcastBasedModel(nn.Module):
             else:
                 epoch_throughput = 0.0
 
-            self.time_tracker.setdefault("train_epoch_times", []).append(epoch_time_elapsed)
-            self.time_tracker.setdefault("train_epoch_throughput", []).append(epoch_throughput)
-            self.time_tracker["train_total_samples"] = self.time_tracker.get("train_total_samples", 0) + sample_count
+            self.time_tracker["train_epoch_times"].append(epoch_time_elapsed)
+            self.time_tracker["train_epoch_throughput"].append(epoch_throughput)
+            self.time_tracker["train_total_samples"] =+ sample_count
+
+            # training-only GPU memory
+            """if torch.cuda.is_available():
+                epoch_alloc = torch.cuda.max_memory_allocated(self.device)
+                epoch_reserved = torch.cuda.max_memory_reserved(self.device)
+
+                prev_alloc = self.time_tracker.get("gpu_train_max_memory_allocated_bytes", 0)
+                prev_reserved = self.time_tracker.get("gpu_train_max_memory_reserved_bytes", 0)
+
+                self.time_tracker["gpu_train_max_memory_allocated_bytes"] = max(prev_alloc, epoch_alloc)
+                self.time_tracker["gpu_train_max_memory_reserved_bytes"] = max(prev_reserved, epoch_reserved)"""
 
             if dist.is_initialized(): #!
                 dist.barrier()
