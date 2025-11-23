@@ -7,12 +7,7 @@ import numpy as np
 from utils import decision, json_pretty_dump
 from collections import OrderedDict, defaultdict
 
-
-seed = 42
-np.random.seed(seed)
-
 parser = argparse.ArgumentParser()
-
 parser.add_argument("--train_anomaly_ratio", default=1.0, type=float)
 
 params = vars(parser.parse_args())
@@ -20,12 +15,15 @@ params = vars(parser.parse_args())
 data_name = f'hdfs_{params["train_anomaly_ratio"]}_tar'
 data_dir = "../data/processed/HDFS_100k"
 
+seed = 42
+np.random.seed(seed)
+
 params = {
-    "log_file": "../data/HDFS/HDFS.log_structured.csv",
-    # "log_file": "../data/HDFS/HDFS_100k.log_structured.csv",
+    "log_file": "../data/HDFS/HDFS.log_structured.csv",     # full dataset
+    # "log_file": "../data/HDFS/HDFS_100k.log_structured.csv",      # smaller subset for quick tests
     "label_file": "../data/HDFS/anomaly_label.csv",
     "test_ratio": 0.2,
-    "random_sessions": True,  # shuffle sessions
+    "random_sessions": True,
     "train_anomaly_ratio": params["train_anomaly_ratio"],
 }
 
@@ -39,7 +37,6 @@ def preprocess_hdfs(
     test_ratio=None,
     train_anomaly_ratio=1,
     random_sessions=False,
-    **kwargs
 ):
     print("Loading HDFS logs from {}.".format(log_file))
     struct_log = pd.read_csv(log_file, engine="c", na_filter=False, memory_map=True)
@@ -108,7 +105,6 @@ def preprocess_hdfs(
     with open(os.path.join(data_dir, "session_test.pkl"), "wb") as fw:
         pickle.dump(session_test, fw)
     json_pretty_dump(params, os.path.join(data_dir, "data_desc.json"))
-
     print("Saved to {}".format(data_dir))
     return session_train, session_test
 

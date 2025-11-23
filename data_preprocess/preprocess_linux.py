@@ -3,17 +3,18 @@ import pickle
 import argparse
 import pandas as pd
 import numpy as np
-from collections import OrderedDict, defaultdict
-
 from utils import decision, json_pretty_dump
+from collections import OrderedDict, defaultdict
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--train_anomaly_ratio", default=0.0, type=float)
+
 params = vars(parser.parse_args())
 
 eval_name = f'linux_{params["train_anomaly_ratio"]}_tar'
-seed = 42
 data_dir = "../data/processed/Linux"
+
+seed = 42
 np.random.seed(seed)
 
 params = {
@@ -61,7 +62,7 @@ def parse_linux_time(month_str, day_str, time_str):
     seconds = total_days * 24 * 3600 + hh * 3600 + mm * 60 + ss
     return seconds
 
-def load_Linux(
+def load_linux(
     log_file,
     time_range,
     train_ratio,
@@ -72,15 +73,11 @@ def load_Linux(
     print("Loading Linux logs from {}.".format(log_file))
     struct_log = pd.read_csv(log_file, engine="c", na_filter=False, memory_map=True)
 
-    # synthetic label: no ground truth, treat all as normal for now
+    # no ground truth, treat all as normal
     struct_log["Label"] = 0
 
     template_col = "EventTemplate"
     content_col = "Content"
-
-    for col in ["Month", "Day", "Time", "EventTemplate"]:
-        if col not in struct_log.columns:
-            raise ValueError(f"Expected column '{col}' in {log_file}, got {list(struct_log.columns)}")
 
     # compute seconds_since_epoch via explicit parser
     times = []
@@ -172,5 +169,5 @@ def load_Linux(
 
 
 if __name__ == "__main__":
-    load_Linux(**params)
+    load_linux(**params)
 

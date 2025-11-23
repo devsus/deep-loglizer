@@ -7,19 +7,18 @@ from utils import decision, json_pretty_dump
 from collections import OrderedDict, defaultdict
 
 parser = argparse.ArgumentParser()
-
 parser.add_argument("--train_anomaly_ratio", default=0.0, type=float)
 
 params = vars(parser.parse_args())
 
-eval_name = f'bgl_{params["train_anomaly_ratio"]}_tar'
-seed = 42
+data_name = f'bgl_{params["train_anomaly_ratio"]}_tar'
 data_dir = "../data/processed/BGL"
+
+seed = 42
 np.random.seed(seed)
 
 params = {
     "log_file": "../data/BGL/BGL.log_structured.csv",
-    # "log_file": "../data/BGL/BGL.log_structured_v2.csv",    #!
     "time_range": 21600,  # 6 hours
     "train_ratio": None,
     "test_ratio": 0.2,
@@ -27,11 +26,11 @@ params = {
     "train_anomaly_ratio": params["train_anomaly_ratio"],
 }
 
-data_dir = os.path.join(data_dir, eval_name)
+data_dir = os.path.join(data_dir, data_name)
 os.makedirs(data_dir, exist_ok=True)
 
 
-def load_BGL(
+def load_bgl(
     log_file,
     time_range,
     train_ratio,
@@ -122,4 +121,4 @@ def load_BGL(
 
 
 if __name__ == "__main__":
-    load_BGL(**params)
+    load_bgl(**params)

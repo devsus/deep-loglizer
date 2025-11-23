@@ -1,7 +1,6 @@
 import os
 import shutil
 from logparser.Drain import LogParser
-
 from utils import convert_to_utf8
 
 INPUT_LOG = convert_to_utf8("Linux")
