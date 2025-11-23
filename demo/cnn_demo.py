@@ -103,7 +103,7 @@ if __name__ == "__main__":
         batch_size=params["batch_size"],
         shuffle=(train_sampler is None),    # !
         pin_memory=True,
-        num_workers=3,
+        num_workers=6,
         persistent_workers=True,
         prefetch_factor=4,
     )

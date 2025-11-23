@@ -184,7 +184,7 @@ if __name__ == "__main__":
             shuffle=(train_sampler is None), # only shuffle when not distributed
             sampler=train_sampler,  #!
             pin_memory=True,
-            num_workers=12, #!
+            num_workers=6, #!
             persistent_workers=True,
             prefetch_factor=4
         )
