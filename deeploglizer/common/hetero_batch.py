@@ -1,8 +1,39 @@
 import math
-from typing import Iterable, List, Sequence
-
 import torch
 from torch.utils.data import Sampler
+from typing import Iterable, List, Sequence
+
+#het seq
+def get_capacity_ratios(
+        world_size: int,
+        method: str = "mixed",
+        normaize: bool = True
+):
+    capacities = []
+    for dev_idx in range(world_size):
+        props = torch.cuda.get_device_properties(dev_idx)
+
+        if method == "memory":
+            cap = props.total_memory / (1024 ** 3)
+        elif method == "compute":
+            cap = props.multi_processor_count * props.clock_rate
+        elif method == "mixed":
+            mem = props.total_memory / (1024 ** 3)
+            compute = props.multi_processor_count * props.clock_rate
+            cap = 0.5 * mem + 0.5 * compute
+        capacities.append(float(cap))
+
+    if not normaize:
+        return capacities
+
+    mean_cap = sum(capacities) / len(capacities)
+    ratios = [c / mean_cap for c in capacities]
+
+    print(
+        "Capacity ratios (%s): capacities=%s, normalized ratios=%s",
+        method, capacities, ratios
+    )
+    return ratios
 
 def compute_per_rank_batch_sizes(
         global_batch_size: int,

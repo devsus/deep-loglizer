@@ -225,28 +225,6 @@ class ForcastBasedModel(nn.Module):
 
             count_start = time.time()
 
-            """topkdf = pd.DataFrame(store_df["y_pred_topk"].tolist())
-            logging.info("Calculating acc sum.")
-            hit_df = pd.DataFrame()
-            for col in sorted(topkdf.columns):
-                topk = col + 1
-                hit = (topkdf[col] == store_df["window_labels"]).astype(int)
-                hit_df[topk] = hit
-                if col == 0:
-                    acc_sum = 2 ** topk * hit
-                else:
-                    acc_sum += 2 ** topk * hit
-            acc_sum[acc_sum == 0] = 2 ** (1 + len(topkdf.columns))
-            hit_df["acc_num"] = acc_sum
-
-            for col in sorted(topkdf.columns):
-                topk = col + 1
-                check_num = 2 ** topk
-                store_df["window_pred_anomaly_{}".format(topk)] = (
-                    ~(hit_df["acc_num"] <= check_num)
-                ).astype(int)
-            # store_df.to_csv("store_{}_2.csv".format(dtype), index=False)"""
-
             # True top-k accuracy - ChatGPT 5
             topkdf = pd.DataFrame(store_df["y_pred_topk"].tolist())
             logging.info("Calculating acc sum.")

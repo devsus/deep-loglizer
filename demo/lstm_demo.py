@@ -6,6 +6,9 @@ import math
 import os
 import shutil
 import sys
+
+from deeploglizer.common import hetero_batch
+
 sys.path.append("../")
 import argparse
 import torch.distributed as dist
@@ -120,7 +123,7 @@ if __name__ == "__main__":
             session_train = ext.transform(session_dict=session_train, datatype="train")  # loads train.pkl
             session_test = ext.transform(session_dict=session_test, datatype="test")  # loads test.pkl
     else:
-        # single-process or user didn’t request cache; previous behavior
+        # previous behavior
         session_train = ext.fit_transform(session_train)
         session_test = ext.transform(session_test, datatype="test")
 
@@ -133,12 +136,24 @@ if __name__ == "__main__":
     if is_ddp and params["hetero_batch"]:
         # quick fix, maybe change later
         # ratios are relative weights, not %
-        ratios = [3.0, 1.0, 1.0]
-        per_rank_batch_sizes = compute_per_rank_batch_sizes(
+        # ratios = [3.0, 1.0, 1.0]
+
+        capacity_ratios = hetero_batch.get_capacity_ratios(
+            world_size=world_size,
+            method="mixed"
+        )
+
+        per_rank_batch_sizes = hetero_batch.compute_per_rank_batch_sizes(
+            global_batch_size=global_batch,
+            world_size=world_size,
+            ratios=capacity_ratios
+        )
+
+        """per_rank_batch_sizes = compute_per_rank_batch_sizes(
             global_batch_size=global_batch,
             world_size=world_size,
             ratios=ratios,
-        )
+        )"""
 
         if is_main_process():
             logging.info(
@@ -158,7 +173,7 @@ if __name__ == "__main__":
             dataset_train,
             batch_sampler=batch_sampler,
             pin_memory=True,
-            num_workers=2,
+            num_workers=6,
             persistent_workers=True,
             prefetch_factor=4,
         )
