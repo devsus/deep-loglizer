@@ -15,8 +15,8 @@ log_format = "<Date> <Time>, <Level> <Component> <Content>"
 regex = [
     r"(\d+\.){3}\d+",            # IPv4
     r"\d+",                      # plain numbers
-    r"0x[0-9A-Fa-f]+",           # hex codes / HRESULTs
-    r"[A-Za-z]:\\[^\s]*",        # Windows paths like C:\Windows\...
+    r"0x[0-9A-Fa-f]+",           # hex codes
+    r"[A-Za-z]:\\[^\s]*",        # paths like C:\Windows\...
 ]
 
 parser = LogParser(

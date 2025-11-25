@@ -108,9 +108,8 @@ if __name__ == "__main__":
         shuffle=(train_sampler is None),    # !
         sampler=train_sampler,
         pin_memory=True,
-        num_workers=6,
-        persistent_workers=True,
-        prefetch_factor=4
+        num_workers=2,
+        #persistent_workers=True,
     )
 
     dataset_test = log_dataset(session_test, feature_type=params["feature_type"])
@@ -119,8 +118,8 @@ if __name__ == "__main__":
         batch_size=4096,
         shuffle=False,
         pin_memory=True,
-        num_workers=1,
-        persistent_workers=False
+        num_workers=2,
+        #persistent_workers=False
     )
 
     model = Transformer(

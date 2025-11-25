@@ -467,17 +467,6 @@ class ForcastBasedModel(nn.Module):
             self.time_tracker["train_epoch_throughput"].append(epoch_throughput)
             self.time_tracker["train_total_samples"] =+ sample_count
 
-            # training-only GPU memory
-            """if torch.cuda.is_available():
-                epoch_alloc = torch.cuda.max_memory_allocated(self.device)
-                epoch_reserved = torch.cuda.max_memory_reserved(self.device)
-
-                prev_alloc = self.time_tracker.get("gpu_train_max_memory_allocated_bytes", 0)
-                prev_reserved = self.time_tracker.get("gpu_train_max_memory_reserved_bytes", 0)
-
-                self.time_tracker["gpu_train_max_memory_allocated_bytes"] = max(prev_alloc, epoch_alloc)
-                self.time_tracker["gpu_train_max_memory_reserved_bytes"] = max(prev_reserved, epoch_reserved)"""
-
             if dist.is_initialized(): #!
                 dist.barrier()
 

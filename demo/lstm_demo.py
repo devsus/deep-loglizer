@@ -7,7 +7,7 @@ import os
 import shutil
 import sys
 
-from deeploglizer.common import hetero_batch
+
 
 sys.path.append("../")
 import argparse
@@ -20,7 +20,7 @@ from deeploglizer.common.dataloader import load_sessions, log_dataset
 from deeploglizer.common.utils import seed_everything, dump_final_results, dump_params
 from deeploglizer.common.ddp import setup, cleanup, is_main_process
 from deeploglizer.common.hetero_batch import HeteroBatchSampler, compute_per_rank_batch_sizes
-
+from deeploglizer.common import hetero_batch
 
 parser = argparse.ArgumentParser()
 
@@ -136,9 +136,9 @@ if __name__ == "__main__":
     if is_ddp and params["hetero_batch"]:
         # quick fix, maybe change later
         # ratios are relative weights, not %
-        # ratios = [3.0, 1.0, 1.0]
+        # ratios = [9.0, 0.5, 0.5] # uncomment for hardcoded ratios
 
-        capacity_ratios = hetero_batch.get_capacity_ratios(
+        ratios = hetero_batch.get_capacity_ratios(
             world_size=world_size,
             method="mixed"
         )
@@ -146,7 +146,7 @@ if __name__ == "__main__":
         per_rank_batch_sizes = hetero_batch.compute_per_rank_batch_sizes(
             global_batch_size=global_batch,
             world_size=world_size,
-            ratios=capacity_ratios
+            ratios=ratios
         )
 
         """per_rank_batch_sizes = compute_per_rank_batch_sizes(
@@ -173,9 +173,8 @@ if __name__ == "__main__":
             dataset_train,
             batch_sampler=batch_sampler,
             pin_memory=True,
-            num_workers=6,
+            num_workers=2,  # try (3 + 2 x 3 = 9)
             persistent_workers=True,
-            prefetch_factor=4,
         )
     else:
         train_sampler = DistributedSampler(dataset_train, shuffle=True, drop_last=False) if is_ddp else None #! !
@@ -199,9 +198,8 @@ if __name__ == "__main__":
             shuffle=(train_sampler is None), # only shuffle when not distributed
             sampler=train_sampler,  #!
             pin_memory=True,
-            num_workers=6, #!
+            num_workers=2, #!
             persistent_workers=True,
-            prefetch_factor=4
         )
 
     dataset_test = log_dataset(session_test, feature_type=params["feature_type"])
@@ -210,8 +208,7 @@ if __name__ == "__main__":
         batch_size=4096,
         shuffle=False,
         pin_memory=True,
-        num_workers=1, #!
-        persistent_workers=False
+        num_workers=2, #!
     )
 
     model = LSTM(meta_data=ext.meta_data, model_save_path=model_save_path, **params)

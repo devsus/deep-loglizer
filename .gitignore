@@ -134,3 +134,8 @@ data/processed/HDFS
 data/processed/BGL
 data/processed/Windows
 data/processed/Linux
+
+# Experiment records
+demo/experiment_records
+demo/*.txt
+demo/*.csv
